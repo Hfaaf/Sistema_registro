@@ -1,0 +1,22 @@
+<h2>Bem-vindo, <%= username %>!</h2>
+
+<h3>Clientes cadastrados:</h3>
+<ul>
+    <% customers.forEach(function(customer) { %>
+        <li>
+            <%= customer.name %> - Forma de pagamento: <%= customer.paymentMethod %> Dinheiro Restante: R$ <%= customer.finalValue %>
+            <form action="/customers/delete/<%= customer._id %>" method="POST" style="display:inline;">
+                <button type="submit">Deletar usuário</button>
+            </form>
+        </li>
+    <% }) %>
+</ul>
+<a href="/customers/start"><button>Jogar</button></a>
+
+<h3>Cadastrar novo cliente</h3>
+<form action="/customers" method="POST">
+    <input type="text" name="name" placeholder="Nome do cliente" required>
+    <input type="text" name="paymentMethod" placeholder="Forma de pagamento" required>
+    <input type="number" name="initialValue" placeholder="Valor inicial" required>
+    <button type="submit">Cadastrar Cliente</button>
+</form>

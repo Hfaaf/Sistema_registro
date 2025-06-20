@@ -1,0 +1,169 @@
+<h2>Bem-vindo, <%= username %>!</h2>
+<button id="startBtn">Iniciar Jogo (1 hora)</button>
+<button id="pauseBtn" disabled>Pausar</button>
+<button id="resetBtn">Zerar</button>
+<div id="timer" style="font-size:2em; margin:20px 0;"></div>
+
+<div id="clientes">
+    <h3>Jogadores</h3>
+    <ul>
+        <% customers.forEach(function(customer) { %>
+            <li>
+                <%= customer.name %> - Dinheiro Restante: R$ <span id="finalValue-<%= customer._id %>">
+                        <%= customer.finalValue %>
+                    </span>
+                    <form class="update-money-form" data-id="<%= customer._id %>">
+                        <input type="number" name="value" placeholder="+/- valor" required>
+                        <button type="submit">Alterar Dinheiro</button>
+                    </form>
+            </li>
+            <% }) %>
+    </ul>
+</div>
+
+<div id="winnersModal"
+    style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.7); z-index:1000; align-items:center; justify-content:center;">
+    <div style="background:#fff; padding:30px; border-radius:10px; min-width:300px; text-align:center;">
+        <h2>Ganhadores</h2>
+        <div id="winnersList"></div>
+        <button onclick="document.getElementById('winnersModal').style.display='none'">Fechar</button>
+    </div>
+</div>
+
+<script>
+    console.log("Script carregado!");
+    let timer;
+    let time = 60 * 60;
+    let paused = false;
+    let remaining = time;
+    let startTime = localStorage.getItem('monopolyStartTime');
+    let pausedTime = localStorage.getItem('monopolyPausedTime');
+
+    function updateTimerDisplay(t) {
+        let min = Math.floor(t / 60);
+        let sec = t % 60;
+        document.getElementById('timer').innerText =
+            (min < 10 ? '0' : '') + min + ':' + (sec < 10 ? '0' : '') + sec;
+    }
+
+    function startCountdown(duration) {
+        remaining = duration;
+        updateTimerDisplay(remaining);
+        document.getElementById('pauseBtn').disabled = false;
+        paused = false;
+        timer = setInterval(function () {
+            if (!paused) {
+                if (remaining <= 0) {
+                    clearInterval(timer);
+                    document.getElementById('timer').innerText = "Tempo esgotado!";
+                    showWinnersModal();
+                    document.getElementById('pauseBtn').disabled = true;
+                    document.getElementById('startBtn').disabled = false;
+                    localStorage.removeItem('monopolyStartTime');
+                    localStorage.removeItem('monopolyPausedTime');
+                } else {
+                    remaining--;
+                    updateTimerDisplay(remaining);
+                    localStorage.setItem('monopolyPausedTime', remaining);
+                }
+            }
+        }, 1000);
+    }
+
+    document.getElementById('startBtn').onclick = async function () {
+        this.disabled = true;
+        document.getElementById('pauseBtn').disabled = false;
+        paused = false;
+        remaining = 60 * 60;
+        localStorage.setItem('monopolyStartTime', Date.now());
+        localStorage.setItem('monopolyPausedTime', remaining);
+        await fetch('/customers/start-game', { method: 'POST' })
+        startCountdown(remaining);
+    };
+
+    document.getElementById('pauseBtn').onclick = function () {
+        paused = !paused;
+        if (paused) {
+            this.innerText = "Continuar";
+        } else {
+            this.innerText = "Pausar";
+        }
+    };
+
+    document.getElementById('resetBtn').onclick = async function () {
+        clearInterval(timer);
+        remaining = 60 * 60;
+        updateTimerDisplay(remaining);
+        document.getElementById('startBtn').disabled = false;
+        document.getElementById('pauseBtn').disabled = true;
+        document.getElementById('pauseBtn').innerText = "Pausar";
+        localStorage.removeItem('monopolyStartTime');
+        localStorage.removeItem('monopolyPausedTime');
+        await fetch('/customers/reset-game', { method: 'POST' });
+        showWinnersModal();
+    };
+
+    window.onload = function () {
+        if (pausedTime) {
+            remaining = Number(pausedTime);
+            updateTimerDisplay(remaining);
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('pauseBtn').disabled = false;
+            startCountdown(remaining);
+        } else if (startTime) {
+            const elapsed = Math.floor((Date.now() - Number(startTime)) / 1000);
+            remaining = 60 * 60 - elapsed;
+            if (remaining > 0) {
+                document.getElementById('startBtn').disabled = true;
+                document.getElementById('pauseBtn').disabled = false;
+                startCountdown(remaining);
+            } else {
+                document.getElementById('timer').innerText = "Tempo esgotado!";
+            }
+        } else {
+            updateTimerDisplay(60 * 60);
+            document.getElementById('pauseBtn').disabled = true;
+        }
+    };
+
+    document.querySelectorAll('.update-money-form').forEach(form => {
+        form.onsubmit = async function (e) {
+            e.preventDefault();
+            console.log("Formulario enviado!")
+            const value = this.querySelector('input[name="value"]').value;
+            const id = this.dataset.id;
+            const res = await fetch(`/customers/update-money/${id}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "Accept": "application/json" },
+                body: JSON.stringify({ value })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                document.getElementById('finalValue-' + id).innerText = data.finalValue;
+                this.reset();
+            }
+        }
+    });
+
+    function showWinnersModal() {
+        const players = Array.from(document.querySelectorAll('[id^="finalValue-"]')).map(span => {
+            const id = span.id.replace('finalValue-', '');
+            const name = span.closest('li').childNodes[0].textContent.trim().split(' - ')[0];
+            const value = Number(span.innerText);
+            return { id, name, value };
+        });
+
+        players.sort((a, b) => b.value - a.value);
+
+        const top3 = players.slice(0, 3);
+
+        const places = ["Primeiro Lugar", "Segundo Lugar", "Terceiro Lugar"];
+        let html = "";
+        top3.forEach((p, i) => {
+            html += `<p><b>${places[i]}:</b> ${p.name} - R$ ${p.value}</p>`;
+        });
+
+        document.getElementById('winnersList').innerHTML = html;
+        document.getElementById('winnersModal').style.display = 'flex';
+    }
+</script>

@@ -1,0 +1,85 @@
+<h2>Corrida dos Jogadores</h2>
+<div id="timer" style="font-size:2em; margin:20px 0;"></div>
+<table border="1" style="width:100%; text-align:center;">
+    <thead>
+        <tr>
+            <th>Posição</th>
+            <th>Nome</th>
+            <th>Dinheiro</th>
+        </tr>
+    </thead>
+    <tbody id="rankingBody"></tbody>
+</table>
+
+<div id="winnersModal"
+    style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.7); z-index:1000; align-items:center; justify-content:center;">
+    <div style="background:#fff; padding:30px; border-radius:10px; min-width:300px; text-align:center;">
+        <h2>Ganhadores</h2>
+        <div id="winnersList"></div>
+        <button onclick="document.getElementById('winnersModal').style.display='none'">Fechar</button>
+    </div>
+</div>
+
+<script>
+    let timerInterval = null;
+
+    function updateTimerDisplay(t) {
+        let min = Math.floor(t / 60);
+        let sec = t % 60;
+        document.getElementById('timer').innerText =
+            (min < 10 ? '0' : '') + min + ':' + (sec < 10 ? '0' : '') + sec;
+    }
+
+    async function fetchRaceData() {
+        const res = await fetch('/customers/race-data');
+        const data = await res.json();
+
+        if (!data.gameStarted) {
+            document.getElementById('timer').innerText = "Aguardando início do jogo...";
+            document.getElementById('rankingBody').innerHTML = "";
+            if (data.timer === 0) {
+                showWinnersModal(data.customers);
+            }
+            return;
+        }
+
+        data.customers.sort((a, b) => b.finalValue - a.finalValue);
+        let html = '';
+        data.customers.forEach((c, i) => {
+            html += `<tr>
+            <td>${i + 1}</td>
+            <td>${c.name}</td>
+            <td>R$ ${c.finalValue}</td>
+        </tr>`;
+        });
+        document.getElementById('rankingBody').innerHTML = html;
+
+        if (data.timer !== null) {
+            updateTimerDisplay(data.timer);
+            if (data.timer <= 0) {
+                showWinnersModal(data.customers);
+                clearInterval(timerInterval);
+            }
+        }
+    }
+
+    function showWinnersModal(customers) {
+        customers.sort((a, b) => b.finalValue - a.finalValue);
+
+        const top3 = customers.slice(0, 3);
+        const places = ["Primeiro Lugar", "Segundo Lugar", "Terceiro Lugar"];
+        let html = "";
+        top3.forEach((p, i) => {
+            html += `<p><b>${places[i]}:</b> ${p.name} - R$ ${p.finalValue}</p>`;
+        });
+
+        document.getElementById('winnersList').innerHTML = html;
+        document.getElementById('winnersModal').style.display = 'flex';
+    }
+
+    window.onload = function () {
+        timerInterval = setInterval(() => {
+            fetchRaceData();
+        }, 1000);
+    };
+</script>
